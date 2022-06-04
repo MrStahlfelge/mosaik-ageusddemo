@@ -25,7 +25,7 @@ dependencies {
     // Mosaik
     implementation("com.github.MrStahlfelge.mosaik:common-model:0.2.0")
     implementation("com.github.MrStahlfelge.mosaik:common-model-ktx:0.2.0")
-    implementation("com.github.MrStahlfelge.mosaik:serialization-jackson:0.2.0")
+    implementation("com.github.MrStahlfelge.mosaik:serialization-jackson:develop-SNAPSHOT")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }

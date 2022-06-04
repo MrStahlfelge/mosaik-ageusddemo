@@ -4,14 +4,18 @@ import org.ergoplatform.mosaik.*
 import org.ergoplatform.mosaik.model.MosaikApp
 import org.ergoplatform.mosaik.model.MosaikManifest
 import org.ergoplatform.mosaik.model.actions.Action
+import org.ergoplatform.mosaik.model.actions.BackendRequestAction
+import org.ergoplatform.mosaik.model.ui.ForegroundColor
+import org.ergoplatform.mosaik.model.ui.Icon
+import org.ergoplatform.mosaik.model.ui.IconType
 import org.ergoplatform.mosaik.model.ui.ViewGroup
+import org.ergoplatform.mosaik.model.ui.layout.Column
 import org.ergoplatform.mosaik.model.ui.layout.HAlignment
 import org.ergoplatform.mosaik.model.ui.layout.Padding
 import org.ergoplatform.mosaik.model.ui.layout.VAlignment
 import org.ergoplatform.mosaik.model.ui.text.Button
 import org.ergoplatform.mosaik.model.ui.text.LabelStyle
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.bind.annotation.*
 import org.springframework.web.servlet.ModelAndView
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -88,11 +92,10 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                 box(Padding.QUARTER_DEFAULT)
                 label(tokenLabel, LabelStyle.HEADLINE1)
                 box(Padding.HALF_DEFAULT)
-                val bigDecimalPrice = BigDecimal.valueOf(nanoerg).movePointLeft(9 - tokenDecimals)
                 row {
                     // TODO ErgAmountLabel
                     label(
-                        bigDecimalPrice.toPlainString(),
+                        ageUsdService.formatErgAmount(nanoerg),
                         LabelStyle.HEADLINE1,
                         HAlignment.END
                     )
@@ -101,6 +104,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                     }
                 }
 
+                val bigDecimalPrice = BigDecimal.valueOf(nanoerg).movePointLeft(9 - tokenDecimals)
                 val price = BigDecimal.valueOf(1.0 / bigDecimalPrice.toDouble())
                     .setScale(tokenDecimals, RoundingMode.HALF_UP).toPlainString()
                 label("1 ERG ≈ $price $tokenLabel", LabelStyle.BODY1BOLD)
@@ -130,7 +134,121 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
             }
         }
     }
+
+    @PostMapping("/sigmausd/exchange/{token}/{type}")
+    fun showExchangeDialog(
+        @PathVariable token: String,
+        @PathVariable type: String,
+    ) = backendResponse(APP_VERSION, changeView(mosaikView {
+
+        val ageUsdBank = ageUsdService.getAgeUsdBank()
+
+        val scale = when (token.lowercase()) {
+            "sigusd" -> 2
+            else -> 0
+        }
+        val nanoerg = when (token.lowercase()) {
+            "sigusd" -> ageUsdBank.sigUsdPrice
+            else -> ageUsdBank.sigRsvPrice
+        }
+
+        val bigDecimalPrice = BigDecimal.valueOf(nanoerg).movePointLeft(9 - scale)
+
+        card {
+            layout(HAlignment.START, VAlignment.TOP) {
+                box(Padding.DEFAULT) {
+                    onClickAction = RELOAD_ACTION_ID
+                    icon(IconType.BACK, Icon.Size.SMALL, ForegroundColor.SECONDARY)
+                }
+            }
+
+            column(Padding.ONE_AND_A_HALF_DEFAULT) {
+                label("Enter the $token amount to $type", LabelStyle.BODY1BOLD, HAlignment.CENTER)
+                box(Padding.HALF_DEFAULT)
+                label("1 $token = ${bigDecimalPrice.toPlainString()} ERG")
+                box(Padding.HALF_DEFAULT)
+                decimalInputField(INPUT_BUYSELLAMOUNT_ID, scale) {
+                    onValueChangedAction = backendRequest("exchange/calc/$token/$type") {
+                        postValues = BackendRequestAction.PostValueType.VALID
+                    }.id
+                }
+
+                box { id = CALCULATION_CONTENT_ID }
+            }
+        }
+
+    }))
+
+    @PostMapping("/sigmausd/exchange/calc/{token}/{type}")
+    fun showExchangeCalculationInfo(
+        @PathVariable token: String,
+        @PathVariable type: String,
+        @RequestBody values: Map<String, *>
+    ) = backendResponse(APP_VERSION, changeView(mosaikView {
+
+        val tokenAmountEntered = (values[INPUT_BUYSELLAMOUNT_ID] as? Number?)?.toLong()
+
+        column {
+            id = CALCULATION_CONTENT_ID
+
+            tokenAmountEntered?.let {
+                box(Padding.DEFAULT)
+
+                val tokenAmountToBuy =
+                    if (type.lowercase() == "buy") tokenAmountEntered else -tokenAmountEntered
+
+                try {
+                    val exchangeInfo = when (token.lowercase()) {
+                        "sigusd" -> ageUsdService.calcSigmaUsdExchange(tokenAmountToBuy)
+                        else -> ageUsdService.calcSigmaRsvExchange(tokenAmountToBuy)
+                    }
+
+                    addRow(exchangeInfo.ergAmount, exchangeInfo.ergAmountDescription)
+                    addRow(exchangeInfo.bankFeeAmount, exchangeInfo.bankFeeDescription)
+                    addRow(exchangeInfo.totalAmount, "Total")
+
+                    box(Padding.HALF_DEFAULT)
+
+                    // TODO add list to choose transaction fee
+
+                    button(type.uppercase())
+
+                } catch (t: Throwable) {
+                    label(
+                        t.message!!,
+                        LabelStyle.BODY1BOLD,
+                        HAlignment.CENTER,
+                        textColor = ForegroundColor.PRIMARY
+                    )
+                }
+            }
+
+        }
+
+    }))
+
+    private fun @MosaikDsl Column.addRow(
+        ergAmount: Long,
+        description: String
+    ) {
+        row {
+            layout(VAlignment.TOP, 1) {
+                // TODO ErgAmountLabel
+                label(
+                    ageUsdService.formatErgAmount(ergAmount) + " ERG",
+                    LabelStyle.BODY1BOLD,
+                    HAlignment.END
+                )
+            }
+            box(Padding.HALF_DEFAULT)
+            layout(VAlignment.TOP, 1) {
+                label(description, LabelStyle.BODY2)
+            }
+        }
+    }
+
+    val CALCULATION_CONTENT_ID = "calculationContent"
+    val INPUT_BUYSELLAMOUNT_ID = "amountToSwap"
 }
 
 const val RELOAD_ACTION_ID = "reload_action"
-const val CALCULATION_CONTENT_ID = "calculationContent"
