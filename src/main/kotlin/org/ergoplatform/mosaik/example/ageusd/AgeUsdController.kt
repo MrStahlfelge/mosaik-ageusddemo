@@ -93,11 +93,11 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                 label(tokenLabel, LabelStyle.HEADLINE1)
                 box(Padding.HALF_DEFAULT)
                 row {
-                    // TODO ErgAmountLabel
-                    label(
-                        ageUsdService.formatErgAmount(nanoerg),
+                    ergAmount(
+                        nanoerg,
                         LabelStyle.HEADLINE1,
-                        HAlignment.END
+                        HAlignment.END,
+                        maxDecimals = 9 - tokenDecimals
                     )
                     box(Padding.HALF_DEFAULT) {
                         label("ERG/$tokenLabel", LabelStyle.BODY2BOLD)
@@ -205,13 +205,51 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
 
                     addRow(exchangeInfo.ergAmount, exchangeInfo.ergAmountDescription)
                     addRow(exchangeInfo.bankFeeAmount, exchangeInfo.bankFeeDescription)
-                    addRow(exchangeInfo.totalAmount, "Total")
+                    box(Padding.QUARTER_DEFAULT)
+
+                    row {
+                        ergAmount(
+                            exchangeInfo.totalAmount,
+                            LabelStyle.BODY1BOLD,
+                            HAlignment.END
+                        )
+                        box(Padding.HALF_DEFAULT)
+                        fiatAmount(exchangeInfo.totalAmount, textColor = ForegroundColor.SECONDARY)
+                    }
 
                     box(Padding.HALF_DEFAULT)
 
-                    // TODO add list to choose transaction fee
+                    layout(HAlignment.JUSTIFY) { button(type.uppercase()) {
+                        onClickAction(
+                            invokeErgoPay(
+                                "ergopay://ergopay-example.herokuapp.com/roundTrip/#P2PK_ADDRESS#",
+                                reloadApp(RELOAD_ACTION_ID),
+                                id = "ageUsdErgoPay" // we use a constant here so that former actions are replaced in executor
+                            )
+                        )
+                    } }
 
-                    button(type.uppercase())
+                    box(Padding.HALF_DEFAULT)
+
+                    label("Transaction fee:")
+
+                    row {
+                        layout(weight = 1) {
+                            box()
+                        }
+                        layout(weight = 3) {
+                            dropDownList(
+                                "minerFee", mapOf(
+                                    "1" to "low fee (0.001 ERG)",
+                                    "5" to "medium fee (0.005 ERG)",
+                                    "30" to "high fee (0.030 ERG)"
+                                ), "5"
+                            )
+                        }
+                        layout(weight = 1) {
+                            box()
+                        }
+                    }
 
                 } catch (t: Throwable) {
                     label(
@@ -233,9 +271,8 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
     ) {
         row {
             layout(VAlignment.TOP, 1) {
-                // TODO ErgAmountLabel
-                label(
-                    ageUsdService.formatErgAmount(ergAmount) + " ERG",
+                ergAmount(
+                    ergAmount,
                     LabelStyle.BODY1BOLD,
                     HAlignment.END
                 )
