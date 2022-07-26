@@ -30,10 +30,11 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
         return ModelAndView("nobrowser.html")
     }
 
+    private fun HttpServletRequest.getServerUrl() = requestURL.toString().substringBefore("sigmausd")
+
     @GetMapping("/sigmausd")
     fun sigmaUsdApp(request: HttpServletRequest): MosaikApp {
-        val baseUrl = request.requestURL.toString()
-        val serverRequestUrl = baseUrl.substring(0, baseUrl.indexOf("sigmausd"))
+        val serverRequestUrl = request.getServerUrl()
 
         return mosaikApp(
             "AgeUSD",
@@ -167,7 +168,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                 box(Padding.HALF_DEFAULT)
                 label("1 $token = ${bigDecimalPrice.toPlainString()} ERG")
                 box(Padding.HALF_DEFAULT)
-                decimalInputField(INPUT_BUYSELLAMOUNT_ID, scale) {
+                decimalInputField(INPUT_BUYSELLAMOUNT_ID, scale, "$token amount to $type") {
                     onValueChangedAction = backendRequest("exchange/calc/$token/$type") {
                         postValues = BackendRequestAction.PostValueType.VALID
                     }.id
@@ -183,7 +184,8 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
     fun showExchangeCalculationInfo(
         @PathVariable token: String,
         @PathVariable type: String,
-        @RequestBody values: Map<String, *>
+        @RequestBody values: Map<String, *>,
+        request: HttpServletRequest,
     ) = backendResponse(APP_VERSION, changeView(mosaikView {
 
         val tokenAmountEntered = (values[INPUT_BUYSELLAMOUNT_ID] as? Number?)?.toLong()
@@ -219,15 +221,16 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
 
                     box(Padding.HALF_DEFAULT)
 
-                    layout(HAlignment.JUSTIFY) { button(type.uppercase()) {
-                        onClickAction(
-                            invokeErgoPay(
-                                "ergopay://ergopay-example.herokuapp.com/roundTrip/#P2PK_ADDRESS#",
-                                reloadApp(RELOAD_ACTION_ID),
-                                id = "ageUsdErgoPay" // we use a constant here so that former actions are replaced in executor
+                    layout(HAlignment.JUSTIFY) {
+                        button(type.uppercase()) {
+                            onClickAction(
+                                backendRequest(
+                                    request.getServerUrl() + "sigmausd/exchange/$tokenAmountToBuy/$token/${exchangeInfo.exchangeRate}",
+                                    id = "ageUsdErgoPay" // we use a constant here so that former actions are replaced in executor
+                                )
                             )
-                        )
-                    } }
+                        }
+                    }
 
                     box(Padding.HALF_DEFAULT)
 
@@ -239,7 +242,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                         }
                         layout(weight = 3) {
                             dropDownList(
-                                "minerFee", mapOf(
+                                INPUT_TX_FEE_ID, mapOf(
                                     "1" to "low fee (0.001 ERG)",
                                     "5" to "medium fee (0.005 ERG)",
                                     "30" to "high fee (0.030 ERG)"
@@ -284,8 +287,44 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
         }
     }
 
+    @PostMapping("/sigmausd/exchange/{tokenAmountToBuy}/{token}/{exchangeRate}")
+    fun getErgoPayUrl(
+        @PathVariable tokenAmountToBuy: Long,
+        @PathVariable exchangeRate: Long,
+        @PathVariable token: String,
+        @RequestBody values: Map<String, *>,
+        request: HttpServletRequest
+    ) = backendResponse(
+        APP_VERSION, invokeErgoPay(
+            getAgeUsdExchangeErgoPayUrl(
+                request.getServerUrl(),
+                tokenAmountToBuy,
+                token.lowercase(),
+                (values[INPUT_TX_FEE_ID] as? String)?.toLong() ?: 5,
+                exchangeRate
+            ),
+        )
+    )
+
+
+    private fun getAgeUsdExchangeErgoPayUrl(
+        serverUrl: String,
+        circulatingDelta: Long,
+        tokenName: String,
+        minersFee: Long,
+        checkRate: Long
+    ): String {
+        return ("ergopay://api.tokenjay.app/" + tokenName
+                + "/exchange/?amount=" + circulatingDelta
+                + "&address=#P2PK_ADDRESS#"
+                + "&checkRate=" + checkRate
+                + "&executionFee=" + (minersFee * 1000L * 1000L))
+    }
+
+
     val CALCULATION_CONTENT_ID = "calculationContent"
     val INPUT_BUYSELLAMOUNT_ID = "amountToSwap"
+    val INPUT_TX_FEE_ID = "minerFee"
 }
 
 const val RELOAD_ACTION_ID = "reload_action"
