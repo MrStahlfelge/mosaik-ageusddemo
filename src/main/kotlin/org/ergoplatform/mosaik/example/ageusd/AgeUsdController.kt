@@ -13,7 +13,6 @@ import org.ergoplatform.mosaik.model.ui.layout.Column
 import org.ergoplatform.mosaik.model.ui.layout.HAlignment
 import org.ergoplatform.mosaik.model.ui.layout.Padding
 import org.ergoplatform.mosaik.model.ui.layout.VAlignment
-import org.ergoplatform.mosaik.model.ui.text.Button
 import org.ergoplatform.mosaik.model.ui.text.LabelStyle
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.servlet.ModelAndView
@@ -22,6 +21,7 @@ import java.math.RoundingMode
 import javax.servlet.http.HttpServletRequest
 
 @RestController
+@CrossOrigin
 class AgeUsdController(private val ageUsdService: AgeUsdService) {
     @GetMapping("/")
     fun mainPage(): ModelAndView {
@@ -30,14 +30,15 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
         return ModelAndView("nobrowser.html")
     }
 
-    private fun HttpServletRequest.getServerUrl() = requestURL.toString().substringBefore("sigmausd")
+    private fun HttpServletRequest.getServerUrl() =
+        requestURL.toString().substringBefore("sigmausd")
 
     @GetMapping("/sigmausd")
-    fun sigmaUsdApp(request: HttpServletRequest): MosaikApp {
+    fun ageUsdDashboard(request: HttpServletRequest): MosaikApp {
         val serverRequestUrl = request.getServerUrl()
 
         return mosaikApp(
-            "AgeUSD",
+            "AgeUSD dashboard",
             APP_VERSION,
             "Buy and sell SigUSD and SigRSV",
             serverRequestUrl + "applogo.png",
@@ -46,18 +47,26 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
         ) {
             val ageUsdBank = ageUsdService.getAgeUsdBank()
 
-            val buySigUsd = backendRequest("exchange/SigUSD/buy")
-            val buySigRsv = backendRequest("exchange/SigRSV/buy")
-            val sellSigUsd = backendRequest("exchange/SigUSD/sell")
-            val sellSigRsv = backendRequest("exchange/SigRSV/sell")
+            val exSigUsd = navigateToApp(serverRequestUrl + "sigmausd/exchange/SigUSD")
+            val exSigRsv = navigateToApp(serverRequestUrl + "sigmausd/exchange/SigRSV")
             reloadApp { id = RELOAD_ACTION_ID }
 
             column {
                 layout(HAlignment.JUSTIFY) {
                     card(Padding.HALF_DEFAULT) {
-                        column(Padding.ONE_AND_A_HALF_DEFAULT) {
-                            label("Reserve ratio", LabelStyle.HEADLINE2)
-                            label("${ageUsdBank.reserveRatio}%", LabelStyle.HEADLINE1)
+                        layout(HAlignment.JUSTIFY, VAlignment.CENTER) {
+                            column(Padding.HALF_DEFAULT) {
+                                layout(HAlignment.END) {
+                                    icon(IconType.REFRESH) {
+                                        onClickAction(RELOAD_ACTION_ID)
+                                    }
+                                }
+
+                                label("Reserve ratio", LabelStyle.HEADLINE2)
+                                label("${ageUsdBank.reserveRatio}%", LabelStyle.HEADLINE1)
+
+                                box(Padding.HALF_DEFAULT)
+                            }
                         }
                     }
 
@@ -65,16 +74,14 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                         "SigUSD",
                         ageUsdBank.sigUsdPrice,
                         2,
-                        buySigUsd,
-                        sellSigUsd,
+                        exSigUsd,
                     )
 
                     addAgeUsdCard(
                         "SigRSV",
                         ageUsdBank.sigRsvPrice,
                         0,
-                        buySigRsv,
-                        sellSigRsv,
+                        exSigRsv,
                     )
                 }
             }
@@ -85,8 +92,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
         tokenLabel: String,
         nanoerg: Long,
         tokenDecimals: Int,
-        buyAction: Action,
-        sellAction: Action,
+        exchangeApp: Action,
     ) {
         card(Padding.HALF_DEFAULT) {
             column(Padding.DEFAULT) {
@@ -111,84 +117,103 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                 label("1 ERG ≈ $price $tokenLabel", LabelStyle.BODY1BOLD)
                 box(Padding.HALF_DEFAULT)
 
-                row {
-                    layout(VAlignment.CENTER, weight = 1) {
-                        box {
-                            layout(HAlignment.END, VAlignment.CENTER) {
-                                button("Buy") {
-                                    onClickAction(buyAction)
-                                }
-                            }
-                        }
-                    }
-                    box(Padding.HALF_DEFAULT)
-                    layout(VAlignment.CENTER, weight = 1) {
-                        box {
-                            layout(HAlignment.START, VAlignment.CENTER) {
-                                button("Sell", Button.ButtonStyle.SECONDARY) {
-                                    onClickAction(sellAction)
-                                }
-                            }
-                        }
-                    }
+                button("Buy or sell") {
+                    onClickAction(exchangeApp)
                 }
             }
         }
     }
 
-    @PostMapping("/sigmausd/exchange/{token}/{type}")
-    fun showExchangeDialog(
-        @PathVariable token: String,
-        @PathVariable type: String,
-    ) = backendResponse(APP_VERSION, changeView(mosaikView {
+    @GetMapping("/sigmausd/exchange/{token}")
+    fun ageUsdExchangeApp(@PathVariable token: String, request: HttpServletRequest): MosaikApp {
+        val serverRequestUrl = request.getServerUrl()
 
-        val ageUsdBank = ageUsdService.getAgeUsdBank()
+        return mosaikApp(
+            "$token exchange",
+            APP_VERSION,
+            "Buy and sell $token",
+            serverRequestUrl + "applogo.png",
+            targetCanvasDimension = MosaikManifest.CanvasDimension.COMPACT_WIDTH,
+            cacheLifetime = 120,
+        ) {
 
-        val scale = when (token.lowercase()) {
-            "sigusd" -> 2
-            else -> 0
-        }
-        val nanoerg = when (token.lowercase()) {
-            "sigusd" -> ageUsdBank.sigUsdPrice
-            else -> ageUsdBank.sigRsvPrice
-        }
+            val ageUsdBank = ageUsdService.getAgeUsdBank()
 
-        val bigDecimalPrice = BigDecimal.valueOf(nanoerg).movePointLeft(9 - scale)
+            val scale = when (token.lowercase()) {
+                "sigusd" -> 2
+                else -> 0
+            }
+            val nanoerg = when (token.lowercase()) {
+                "sigusd" -> ageUsdBank.sigUsdPrice
+                else -> ageUsdBank.sigRsvPrice
+            }
 
-        card {
-            layout(HAlignment.START, VAlignment.TOP) {
-                box(Padding.DEFAULT) {
-                    onClickAction = RELOAD_ACTION_ID
-                    icon(IconType.BACK, Icon.Size.SMALL, ForegroundColor.SECONDARY)
+            val bigDecimalPrice = BigDecimal.valueOf(nanoerg).movePointLeft(9 - scale)
+
+            card {
+                column(Padding.ONE_AND_A_HALF_DEFAULT) {
+                    label(
+                        "Enter the $token amount to buy or sell",
+                        LabelStyle.BODY1BOLD,
+                        HAlignment.CENTER
+                    )
+                    box(Padding.HALF_DEFAULT)
+                    row(packed = true) {
+                        label("1 $token = ${bigDecimalPrice.toPlainString()} ERG")
+
+                        box(Padding.DEFAULT) {
+                            onClickAction =
+                                addAction(navigateToApp(serverRequestUrl + "sigmausd")).id
+                            icon(IconType.INFO, Icon.Size.SMALL, ForegroundColor.SECONDARY)
+                        }
+
+                    }
+                    box(Padding.HALF_DEFAULT)
+                    row {
+                        val showInfoAction = backendRequest("calc/") {
+                            // this makes the request always perform, even when an invalid amount is entered
+                            postValues = BackendRequestAction.PostValueType.VALID
+                        }
+
+                        layout(weight = 1) {
+                            dropDownList(
+                                INPUT_EXCHANGE_TYPE, mapOf(
+                                    "buy" to "Buy",
+                                    "sell" to "Sell",
+                                ), "buy"
+                            ) {
+                                onValueChangedAction = showInfoAction.id
+                            }
+                        }
+
+                        box(Padding.QUARTER_DEFAULT)
+
+                        layout(weight = 2) {
+                            decimalInputField(
+                                INPUT_BUYSELLAMOUNT_ID,
+                                scale,
+                                "$token amount"
+                            ) {
+                                onValueChangedAction = showInfoAction.id
+                            }
+                        }
+                    }
+                    box { id = CALCULATION_CONTENT_ID }
                 }
             }
 
-            column(Padding.ONE_AND_A_HALF_DEFAULT) {
-                label("Enter the $token amount to $type", LabelStyle.BODY1BOLD, HAlignment.CENTER)
-                box(Padding.HALF_DEFAULT)
-                label("1 $token = ${bigDecimalPrice.toPlainString()} ERG")
-                box(Padding.HALF_DEFAULT)
-                decimalInputField(INPUT_BUYSELLAMOUNT_ID, scale, "$token amount to $type") {
-                    onValueChangedAction = backendRequest("exchange/calc/$token/$type") {
-                        postValues = BackendRequestAction.PostValueType.VALID
-                    }.id
-                }
-
-                box { id = CALCULATION_CONTENT_ID }
-            }
         }
+    }
 
-    }))
-
-    @PostMapping("/sigmausd/exchange/calc/{token}/{type}")
+    @PostMapping("/sigmausd/exchange/{token}/calc")
     fun showExchangeCalculationInfo(
         @PathVariable token: String,
-        @PathVariable type: String,
         @RequestBody values: Map<String, *>,
         request: HttpServletRequest,
     ) = backendResponse(APP_VERSION, changeView(mosaikView {
 
         val tokenAmountEntered = (values[INPUT_BUYSELLAMOUNT_ID] as? Number?)?.toLong()
+        val type = values[INPUT_EXCHANGE_TYPE] as String
 
         column {
             id = CALCULATION_CONTENT_ID
@@ -325,6 +350,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
     val CALCULATION_CONTENT_ID = "calculationContent"
     val INPUT_BUYSELLAMOUNT_ID = "amountToSwap"
     val INPUT_TX_FEE_ID = "minerFee"
+    val INPUT_EXCHANGE_TYPE = "exchangeType"
 }
 
 const val RELOAD_ACTION_ID = "reload_action"
