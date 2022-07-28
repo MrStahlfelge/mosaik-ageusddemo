@@ -104,6 +104,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                         nanoerg,
                         LabelStyle.HEADLINE1,
                         HAlignment.END,
+                        withCurrency = false,
                         maxDecimals = 9 - tokenDecimals
                     )
                     box(Padding.HALF_DEFAULT) {
