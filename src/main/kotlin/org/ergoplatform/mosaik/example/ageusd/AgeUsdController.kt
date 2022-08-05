@@ -1,6 +1,7 @@
 package org.ergoplatform.mosaik.example.ageusd
 
 import org.ergoplatform.mosaik.*
+import org.ergoplatform.mosaik.jackson.MosaikSerializer
 import org.ergoplatform.mosaik.model.MosaikApp
 import org.ergoplatform.mosaik.model.MosaikManifest
 import org.ergoplatform.mosaik.model.actions.Action
@@ -176,7 +177,8 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                             postValues = BackendRequestAction.PostValueType.VALID
                         }
 
-                        layout(weight = 1) {
+                        // VAlignment.BOTTOM needed for web as dropdown and input field is not of same height
+                        layout(weight = 1, vAlignment = VAlignment.BOTTOM) {
                             dropDownList(
                                 INPUT_EXCHANGE_TYPE, mapOf(
                                     "buy" to "Buy",
@@ -210,11 +212,16 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
     fun showExchangeCalculationInfo(
         @PathVariable token: String,
         @RequestBody values: Map<String, *>,
+        @RequestHeader headers: Map<String, String>,
         request: HttpServletRequest,
     ) = backendResponse(APP_VERSION, changeView(mosaikView {
 
         val tokenAmountEntered = (values[INPUT_BUYSELLAMOUNT_ID] as? Number?)?.toLong()
         val type = values[INPUT_EXCHANGE_TYPE] as String
+        val isWebExecutor = MosaikSerializer.fromContextHeadersMap(headers).walletAppName.contains(
+            "web",
+            ignoreCase = true
+        )
 
         column {
             id = CALCULATION_CONTENT_ID
@@ -231,11 +238,14 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                         else -> ageUsdService.calcSigmaRsvExchange(tokenAmountToBuy)
                     }
 
-                    addRow(exchangeInfo.ergAmount, exchangeInfo.ergAmountDescription)
-                    addRow(exchangeInfo.bankFeeAmount, exchangeInfo.bankFeeDescription)
+                    addRow(exchangeInfo.ergAmount, exchangeInfo.ergAmountDescription, isWebExecutor)
+                    addRow(exchangeInfo.bankFeeAmount, exchangeInfo.bankFeeDescription, isWebExecutor)
                     box(Padding.QUARTER_DEFAULT)
 
-                    row {
+                    // packed is needed when no fiat value is set to center the element
+                    // normally, it should always work. but a layouting bug on Compose messes,
+                    // so we give Compose executors a false here
+                    row(packed = isWebExecutor) {
                         ergAmount(
                             exchangeInfo.totalAmount,
                             LabelStyle.BODY1BOLD,
@@ -296,10 +306,13 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
 
     private fun @MosaikDsl Column.addRow(
         ergAmount: Long,
-        description: String
+        description: String,
+        isWeb: Boolean
     ) {
+        // VAlignment.CENTER for Web but TOP for others
+        val vAlignment = if (isWeb) VAlignment.CENTER else VAlignment.TOP
         row {
-            layout(VAlignment.TOP, 1) {
+            layout(vAlignment, 1) {
                 ergAmount(
                     ergAmount,
                     LabelStyle.BODY1BOLD,
@@ -307,7 +320,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                 )
             }
             box(Padding.HALF_DEFAULT)
-            layout(VAlignment.TOP, 1) {
+            layout(vAlignment, 1) {
                 label(description, LabelStyle.BODY2)
             }
         }
