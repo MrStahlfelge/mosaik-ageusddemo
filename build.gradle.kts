@@ -23,7 +23,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 
     // Mosaik
-    val mosaikVersion = "0.5.0"
+    val mosaikVersion = "0.5.1"
     implementation("com.github.MrStahlfelge.mosaik:common-model:$mosaikVersion")
     implementation("com.github.MrStahlfelge.mosaik:common-model-ktx:$mosaikVersion")
     implementation("com.github.MrStahlfelge.mosaik:serialization-jackson:$mosaikVersion")

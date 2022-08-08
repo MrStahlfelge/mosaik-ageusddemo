@@ -52,7 +52,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
             val exSigRsv = navigateToApp(serverRequestUrl + "sigmausd/exchange/SigRSV")
             reloadApp { id = RELOAD_ACTION_ID }
 
-            column {
+            column(Padding.DEFAULT) {
                 layout(HAlignment.JUSTIFY) {
                     card(Padding.HALF_DEFAULT) {
                         layout(HAlignment.JUSTIFY, VAlignment.CENTER) {
@@ -152,7 +152,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
 
             val bigDecimalPrice = BigDecimal.valueOf(nanoerg).movePointLeft(9 - scale)
 
-            card {
+            card(Padding.ONE_AND_A_HALF_DEFAULT) {
                 column(Padding.ONE_AND_A_HALF_DEFAULT) {
                     label(
                         "Enter the $token amount to buy or sell",
