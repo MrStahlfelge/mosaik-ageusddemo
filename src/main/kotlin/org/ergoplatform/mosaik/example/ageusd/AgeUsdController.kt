@@ -3,6 +3,7 @@ package org.ergoplatform.mosaik.example.ageusd
 import org.ergoplatform.mosaik.*
 import org.ergoplatform.mosaik.jackson.MosaikSerializer
 import org.ergoplatform.mosaik.model.MosaikApp
+import org.ergoplatform.mosaik.model.MosaikContext
 import org.ergoplatform.mosaik.model.MosaikManifest
 import org.ergoplatform.mosaik.model.actions.Action
 import org.ergoplatform.mosaik.model.actions.BackendRequestAction
@@ -127,8 +128,13 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
     }
 
     @GetMapping("/sigmausd/exchange/{token}")
-    fun ageUsdExchangeApp(@PathVariable token: String, request: HttpServletRequest): MosaikApp {
+    fun ageUsdExchangeApp(
+        @PathVariable token: String,
+        @RequestHeader headers: Map<String, String>,
+        request: HttpServletRequest
+    ): MosaikApp {
         val serverRequestUrl = request.getServerUrl()
+        val isWebExecutor = MosaikSerializer.fromContextHeadersMap(headers).isWebExecutor()
 
         return mosaikApp(
             "$token exchange",
@@ -160,7 +166,9 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
                         HAlignment.CENTER
                     )
                     box(Padding.HALF_DEFAULT)
-                    row(packed = true) {
+                    // packed is needed on web to center the row. but on non-web executors,
+                    // it can make the label wrap
+                    row(packed = isWebExecutor) {
                         label("1 $token = ${bigDecimalPrice.toPlainString()} ERG")
 
                         box(Padding.DEFAULT) {
@@ -208,6 +216,12 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
         }
     }
 
+    private fun MosaikContext.isWebExecutor() =
+        this.walletAppName.contains(
+            "web",
+            ignoreCase = true
+        )
+
     @PostMapping("/sigmausd/exchange/{token}/calc")
     fun showExchangeCalculationInfo(
         @PathVariable token: String,
@@ -218,10 +232,7 @@ class AgeUsdController(private val ageUsdService: AgeUsdService) {
 
         val tokenAmountEntered = (values[INPUT_BUYSELLAMOUNT_ID] as? Number?)?.toLong()
         val type = values[INPUT_EXCHANGE_TYPE] as String
-        val isWebExecutor = MosaikSerializer.fromContextHeadersMap(headers).walletAppName.contains(
-            "web",
-            ignoreCase = true
-        )
+        val isWebExecutor = MosaikSerializer.fromContextHeadersMap(headers).isWebExecutor()
 
         column {
             id = CALCULATION_CONTENT_ID
